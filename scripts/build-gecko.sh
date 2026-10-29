@@ -21,7 +21,11 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq \
     build-essential curl git python3 python3-pip python3-dev \
     libgtk-3-dev libdbus-glib-1-dev libxt-dev libasound2-dev libpulse-dev \
-    unzip xz-utils bzip2 uuid-dev m4 file wget clang lld llvm
+    unzip xz-utils bzip2 uuid-dev m4 file wget clang lld llvm \
+    libx11-dev libx11-xcb-dev libxcb1-dev libxcb-shm0-dev libxext-dev \
+    libxrandr-dev libxcomposite-dev libxcursor-dev libxdamage-dev \
+    libxfixes-dev libxi-dev libdrm-dev libegl1-mesa-dev libgles2-mesa-dev \
+    libwayland-dev libwayland-egl-backend-dev yasm nasm
 
 echo "==== toolchains (manual, bypasses broken b2g bootstrap) ===="
 # gecko-b2g's 'mach bootstrap' has a bug in its b2g application branch
