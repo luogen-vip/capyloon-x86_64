@@ -18,7 +18,8 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq \
     squashfs-tools xorriso rsync \
     grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
-    mtools dosfstools debootstrap e2fsprogs parted
+    mtools dosfstools debootstrap e2fsprogs parted \
+    debian-archive-keyring ubuntu-archive-keyring
 # Ubuntu ships an ancient live-build (3.0~a57) that lacks the options we use.
 # Install Debian bookworm's live-build (20230502) which matches our config.
 LB_VER="20230502"
