@@ -1,0 +1,28 @@
+diff --git a/builder/src/templates/debian/start.sh b/builder/src/templates/debian/start.sh
+index 79ce702..d251cff 100755
+--- a/builder/src/templates/debian/start.sh
++++ b/builder/src/templates/debian/start.sh
+@@ -37,6 +37,13 @@ else
+ 
+     # Create a basic sway configuration, disabling window decorations.
+     echo "default_border none" > /tmp/capyloon_sway.config
++    # Desktop (x86_64) kiosk integration: make the b2g window fullscreen
++    # and hide edge borders, whatever the app_id ends up being.
++    echo "hide_edge_borders both" >> /tmp/capyloon_sway.config
++    echo 'for_window [app_id="b2g"] fullscreen enable' >> /tmp/capyloon_sway.config
++    echo 'for_window [app_id="B2G"] fullscreen enable' >> /tmp/capyloon_sway.config
++    echo 'for_window [app_id=".*b2g.*"] fullscreen enable' >> /tmp/capyloon_sway.config
++    echo 'for_window [class="^b2g$"] fullscreen enable' >> /tmp/capyloon_sway.config
+     echo "exec echo \"\$WAYLAND_DISPLAY\" > \"\$SWAY_STARTUP\"" >> /tmp/capyloon_sway.config
+     echo "exec \"systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP\"" >> /tmp/capyloon_sway.config
+ 
+@@ -50,6 +57,9 @@ fi
+ 
+ export WAYLAND_DISPLAY=`ls /run/user/1000/wayland-*|grep -v lock|cut -c 16-200`
+ 
++# Make sure Gecko uses its native Wayland backend under the kiosk session.
++export MOZ_ENABLE_WAYLAND=1
++
+ echo "Setting WAYLAND_DISPLAY to ${WAYLAND_DISPLAY}" >> ${START_LOG}
+ echo "=================" >> ${START_LOG}
+ 

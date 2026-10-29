@@ -1,0 +1,11 @@
+# build artifacts
+*.iso
+*.iso.sha256
+output/
+work/
+cache/
+chroot/
+binary/
+.build/
+*.log
+__pycache__/

@@ -1,0 +1,52 @@
+# Capyloon x86_64 GRUB theme
+desktop-image: "../splash.png"
+title-color: "#ffffff"
+title-font: "Unifont Regular 16"
+title-text: "Capyloon x86_64"
+message-font: "Unifont Regular 16"
+terminal-font: "Unifont Regular 16"
+
+# help bar at the bottom
++ label {
+        top = 100%-44
+        left = 0
+        width = 100%
+        height = 24
+        text = "Enter 启动 | ↑↓ 选择 | E 编辑"
+        align = "center"
+        color = "#c8c8c8"
+        font = "Unifont Regular 16"
+}
+
+# boot menu
++ boot_menu {
+        left = 12%
+        width = 76%
+        top = 56%
+        height = 38%-60
+        item_color = "#b0b8c0"
+        item_font = "Unifont Regular 16"
+        selected_item_color = "#ffffff"
+        selected_item_font = "Unifont Regular 16"
+        item_height = 22
+        item_padding = 2
+        item_spacing = 6
+        icon_width = 0
+        icon_height = 0
+        item_icon_space = 0
+}
+
+# progress bar (timeout)
++ progress_bar {
+        id = "__timeout__"
+        top = 100%-20
+        left = 30%
+        width = 40%
+        height = 12
+        text_color = "#ffffff"
+        fg_color = "#ff7f2a"
+        bg_color = "#30343c"
+        border_color = "#1a1d22"
+        text = "@TIMEOUT@ 秒后启动..."
+        font = "Unifont Regular 16"
+}

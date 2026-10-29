@@ -1,0 +1,186 @@
+#!/bin/bash
+# =============================================================================
+# Capyloon x86_64 磁盘安装器
+# 将当前 live 系统完整安装到本地硬盘，并写入 GRUB (BIOS + UEFI 双支持)。
+# 安装完成后重启、拔掉 U 盘即可从硬盘直接启动 Capyloon。
+# =============================================================================
+set -u
+
+export LANG=C.UTF-8
+LC_ALL=C.UTF-8
+
+LOGFILE=/var/log/capyloon-install.log
+SQUASH=/run/live/medium/live/filesystem.squashfs
+TARGET=/target
+
+# ---------------------------------------------------------------- helpers
+log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOGFILE"; }
+die() { log "错误: $*"; whiptail --title "安装失败" --msgbox "安装失败:\n$*\n\n日志: $LOGFILE" 12 70 2>/dev/null || true; exit 1; }
+
+if [ "$(id -u)" != "0" ]; then
+    echo "请用 root 运行: sudo capyloon-installer" >&2
+    exit 1
+fi
+
+# Root filesystem source: the live squashfs.
+if [ ! -f "$SQUASH" ]; then
+    # Fallback: try common live-boot mount points.
+    for c in /run/live/medium/live/filesystem.squashfs /live/medium/live/filesystem.squashfs /run/live/medium/live/filesystem.squashfs; do
+        [ -f "$c" ] && SQUASH="$c" && break
+    done
+fi
+[ -f "$SQUASH" ] || die "找不到 live 系统镜像 ($SQUASH)。请从 live USB 启动后再运行安装器。"
+
+# ---------------------------------------------------------------- disk pick
+mapfile -t DISKLIST < <(lsblk -d -n -o NAME,SIZE,MODEL,TYPE 2>/dev/null | awk '$4=="disk"{printf "%s|%s|%s", "/dev/"$1, $2, $3}')
+
+if [ ${#DISKLIST[@]} -eq 0 ]; then die "未检测到任何硬盘"; fi
+
+MENU_ARGS=()
+for i in "${!DISKLIST[@]}"; do
+    IFS='|' read -r dev size model <<< "${DISKLIST[$i]}"
+    MENU_ARGS+=("$dev" "${size}  ${model:-(未知型号)}")
+done
+
+TARGET_DISK=""
+if [ "${1:-}" = "--auto" ]; then
+    # Auto mode (GRUB boot): single disk => pick it directly.
+    if [ ${#DISKLIST[@]} -eq 1 ]; then
+        TARGET_DISK="${DISKLIST[0]%%|*}"
+        log "自动模式: 选择唯一硬盘 $TARGET_DISK"
+    else
+        TARGET_DISK=$(whiptail --title "Capyloon 安装器" --menu \
+            "选择要安装 Capyloon 的目标硬盘 (自动模式仅有一块盘时直接选中):" 20 76 8 \
+            "${MENU_ARGS[@]}" 3>&1 1>&2 2>&3) || exit 1
+    fi
+else
+    TARGET_DISK=$(whiptail --title "Capyloon 安装器" --menu \
+        "选择要安装 Capyloon 的目标硬盘:" 20 76 8 \
+        "${MENU_ARGS[@]}" 3>&1 1>&2 2>&3) || exit 1
+fi
+
+log "目标硬盘: $TARGET_DISK"
+
+# ---------------------------------------------------------------- confirm
+whiptail --title "!!! 警告 !!!" --yesno \
+"即将把 Capyloon 完整安装到: $TARGET_DISK
+
+该硬盘上的 全部数据将被清除 (重新分区)!
+这是最后一步确认, 继续吗?" 12 66 || exit 1
+
+# ---------------------------------------------------------------- partition
+log "开始分区 $TARGET_DISK ..."
+
+swapoff -a 2>/dev/null || true
+umount ${TARGET_DISK}* 2>/dev/null || true
+
+# Wipe signatures
+wipefs -a "$TARGET_DISK" >/dev/null 2>&1 || true
+dd if=/dev/zero of="$TARGET_DISK" bs=1M count=10 status=none
+
+parted -s "$TARGET_DISK" mklabel gpt mkpart ESP fat32 1MiB 513MiB set 1 esp on \
+    mkpart bios 513MiB 514MiB set 2 bios_grub on \
+    mkpart root ext4 514MiB 100% || die "分区失败"
+
+partprobe "$TARGET_DISK" 2>/dev/null || true
+sleep 2
+
+# Resolve partition names (nvme uses pN suffix)
+if [[ "$TARGET_DISK" == *nvme* || "$TARGET_DISK" == *mmcblk* ]]; then P="${TARGET_DISK}p"; else P="$TARGET_DISK"; fi
+ESP="${P}1"; BIOSP="${P}2"; ROOTP="${P}3"
+
+log "格式化 ..."
+mkfs.vfat -F32 -n CAPYLOON_ESP "$ESP" || die "ESP 格式化失败"
+mkfs.ext4 -F -L capyloon-root "$ROOTP" || die "根分区格式化失败"
+
+# ---------------------------------------------------------------- copy rootfs
+log "挂载目标分区 ..."
+mkdir -p "$TARGET"
+mount "$ROOTP" "$TARGET" || die "挂载根分区失败"
+mkdir -p "$TARGET/boot/efi"
+mount "$ESP" "$TARGET/boot/efi" || die "挂载 ESP 失败"
+
+log "解压系统 (约 2-8 分钟, 取决于 U 盘与硬盘速度) ..."
+unsquashfs -f -d "$TARGET" -no-progress "$SQUASH" >>"$LOGFILE" 2>&1 || die "解压系统失败 (详见 $LOGFILE)"
+
+log "生成 /etc/fstab ..."
+ROOT_UUID=$(blkid -s UUID -o value "$ROOTP")
+ESP_UUID=$(blkid -s UUID -o value "$ESP")
+cat > "$TARGET/etc/fstab" <<EOF
+UUID=$ROOT_UUID  /         ext4  errors=remount-ro  0 1
+UUID=$ESP_UUID   /boot/efi vfat  umask=0077         0 2
+EOF
+
+# 2G swapfile (Firefox-based OS likes some swap on 4GB machines)
+log "创建 2G swapfile ..."
+dd if=/dev/zero of="$TARGET/swapfile" bs=1M count=2048 status=none
+chmod 600 "$TARGET/swapfile"
+mkswap "$TARGET/swapfile" >>"$LOGFILE" 2>&1
+SWAP_UUID=$(blkid -s UUID -o value "$TARGET/swapfile")
+echo "UUID=$SWAP_UUID none swap sw 0 0" >> "$TARGET/etc/fstab"
+
+# Make image unique per machine
+truncate -s 0 "$TARGET/etc/machine-id" 2>/dev/null || true
+rm -f "$TARGET/var/lib/dbus/machine-id"
+ln -sf /etc/machine-id "$TARGET/var/lib/dbus/machine-id"
+
+# ---------------------------------------------------------------- chroot: grub
+log "写入 GRUB 引导 (BIOS + UEFI 双支持) ..."
+mount --bind /dev      "$TARGET/dev"      2>/dev/null || true
+mount --bind /dev/pts  "$TARGET/dev/pts"  2>/dev/null || true
+mount --bind /proc     "$TARGET/proc"     2>/dev/null || true
+mount --bind /sys      "$TARGET/sys"      2>/dev/null || true
+mount --bind /run      "$TARGET/run"      2>/dev/null || true
+
+chroot "$TARGET" /bin/bash -x <<CHROOT >>"$LOGFILE" 2>&1
+mount -t efivarfs efivarfs /sys/firmware/efi/efivars 2>/dev/null || true
+export DEBIAN_FRONTEND=noninteractive
+
+# BIOS/legacy boot (GPT + bios_grub 分区)
+if [ -e /sys/firmware/efi ]; then
+    echo "[installer] UEFI 平台: 跳过 BIOS 引导写入" || true
+else
+    echo "[installer] BIOS 平台: 写入 MBR 引导 ..."
+    grub-install --target=i386-pc --boot-directory=/boot "$TARGET_DISK" || echo "[installer] BIOS grub-install 失败(非致命)"
+fi
+
+# UEFI boot
+if [ -d /sys/firmware/efi ]; then
+    echo "[installer] UEFI: 写入 ESP ..."
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+        --bootloader-id=capyloon --recheck || echo "[installer] UEFI grub-install 失败(非致命)"
+    # Fallback path: BOOTX64.EFI so that even without NVRAM entry it boots
+    mkdir -p /boot/efi/EFI/BOOT
+    cp -f /boot/efi/EFI/capyloon/grubx64.efi /boot/efi/EFI/BOOT/BOOTX64.EFI 2>/dev/null || true
+fi
+
+grub-mkconfig -o /boot/grub/grub.cfg || echo "[installer] grub-mkconfig 失败(非致命)"
+update-initramfs -u -k all 2>/dev/null || true
+CHROOT
+
+# Unmount
+sync
+umount "$TARGET/dev/pts" "$TARGET/dev" "$TARGET/proc" "$TARGET/sys" "$TARGET/run" 2>/dev/null || true
+umount "$TARGET/boot/efi" 2>/dev/null || true
+umount "$TARGET" 2>/dev/null || true
+
+# EFI boot entries also work via fallback; additionally try efibootmgr ordering on host
+if [ -d /sys/firmware/efi ] && command -v efibootmgr >/dev/null 2>&1; then
+    efibootmgr -c -d "$TARGET_DISK" -p 1 -L "Capyloon" -l '\EFI\capyloon\grubx64.efi' >/dev/null 2>&1 || true
+fi
+
+log "安装完成!"
+whiptail --title "安装完成" --msgbox \
+"Capyloon 已成功安装到 $TARGET_DISK
+
+请:
+  1. 点击 OK 后输入 reboot 重启
+  2. 重启时拔掉 U 盘
+  3. 电脑将直接从硬盘启动 Capyloon
+
+默认账号: capyloon / capyloon (sudo 免密)" 14 62
+
+echo ""
+read -rp "现在重启吗? [y/N]: " yn
+[[ "$yn" =~ ^[Yy]$ ]] && { eject ${TARGET_DISK} 2>/dev/null || true; systemctl --no-wall reboot; }
+exit 0

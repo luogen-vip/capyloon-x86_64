@@ -1,0 +1,19 @@
+=============================================================
+  Capyloon x86_64  (Gecko 内核 Web 操作系统 - 桌面移植版)
+=============================================================
+
+ 【图形界面】 在 tty7 运行 (Ctrl+Alt+F7 切换)
+ 【调试终端】 当前 tty1 已用 root 自动登录
+ 【安装系统】 运行: sudo capyloon-installer
+              (或在 GRUB 菜单直接选『安装到硬盘』)
+
+ 常用命令:
+   systemctl status capyloon     # 查看桌面会话状态
+   journalctl -u capyloon -f     # 跟踪桌面日志
+   nmtui                         # 网络(WiFi)配置
+   bluetoothctl                  # 蓝牙管理
+   nmcli device wifi connect <SSID> password <密码>
+
+ 默认账号: capyloon / capyloon   (sudo 免密码)
+ 日志文件: /tmp/capyloon_*.log  /tmp/capyloon_gecko.log
+=============================================================
