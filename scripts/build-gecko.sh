@@ -38,10 +38,15 @@ export RUSTUP_TOOLCHAIN=1.76.0
 rustc --version
 
 # cbindgen MUST be 0.26.x: gecko 123's cbindgen.toml contains duplicate keys
-# which cbindgen >= 0.28 (newer toml parser) rejects. Install into a private
-# root and prepend to PATH so the preinstalled 0.29 never wins.
+# which cbindgen >= 0.28 (newer toml parser) rejects. Build 0.26.0 from its
+# own repo (uses its pinned Cargo.lock; `cargo install cbindgen` from the
+# registry re-resolves deps that now require cargo >= 1.85 / edition 2024).
 CBINDGEN_ROOT="$HOME/.cbindgen-026"
-cargo +1.76.0 install cbindgen --version 0.26.0 --root "$CBINDGEN_ROOT" --force 2>&1 | tail -2
+if [ ! -x "$CBINDGEN_ROOT/bin/cbindgen" ]; then
+    rm -rf /tmp/cbindgen-src
+    git clone --depth 1 --branch v0.26.0 https://github.com/eqrion/cbindgen.git /tmp/cbindgen-src
+    (cd /tmp/cbindgen-src && cargo +1.76.0 install --path . --root "$CBINDGEN_ROOT" --locked 2>&1 | tail -2)
+fi
 export PATH="$CBINDGEN_ROOT/bin:$PATH"
 hash -r
 echo "using cbindgen: $(command -v cbindgen) -> $(cbindgen --version)"
