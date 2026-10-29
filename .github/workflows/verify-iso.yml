@@ -1,0 +1,56 @@
+name: Verify ISO structure
+
+on:
+  workflow_dispatch:
+    inputs:
+      iso_url:
+        description: "ISO 直链下载地址"
+        required: true
+        type: string
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 下载 ISO
+        run: |
+          curl -fsSL "${{ inputs.iso_url }}" -o test.iso
+          ls -la test.iso
+          sha256sum test.iso
+
+      - name: ISO 结构检查 (GRUB BIOS+UEFI / 内核 / squashfs)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xorriso squashfs-tools
+          echo "===== 可引导性 ====="
+          xorriso -indev test.iso -report_el_torito as_mkisofs | head -20
+          echo "===== 根目录 ====="
+          xorriso -indev test.iso -find / -maxdepth 2 | head -30
+          echo "===== boot 目录 ====="
+          xorriso -indev test.iso -find /boot -exec ls -l {} -- 2>/dev/null | head -40
+          echo "===== grub.cfg ====="
+          xorriso -osirrox on -indev test.iso -extract /boot/grub/grub.cfg /tmp/grub.cfg 2>/dev/null
+          cat /tmp/grub.cfg 2>/dev/null | head -60
+
+      - name: squashfs 内容抽查
+        run: |
+          xorriso -osirrox on -indev test.iso -extract /live/filesystem.squashfs /tmp/fs.squashfs
+          ls -la /tmp/fs.squashfs
+          echo "===== Capyloon 核心文件 ====="
+          for p in opt/capyloon/b2g/b2g opt/capyloon/start.sh opt/capyloon/api-daemon/api-daemon opt/capyloon/ipfsd/ipfsd opt/capyloon/b2ghald/b2ghald usr/sbin/capyloon-installer etc/systemd/system/getty@tty1.service.d/autologin.conf etc/sudoers.d/capyloon etc/motd usr/share/plymouth/themes/capyloon/capyloon.plymouth boot/grub/grub.cfg; do
+            if unsquashfs -ll /tmp/fs.squashfs "/$p" 2>/dev/null | grep -q "$p"; then
+              echo "  ✓ /$p"
+            else
+              echo "  ✗ /$p 缺失!"
+            fi
+          done
+          echo "===== systemd 启用状态 ====="
+          unsquashfs -ll /tmp/fs.squashfs "/etc/systemd/system/display-manager.service" 2>/dev/null | grep -E "display-manager|capyloon" || echo "  ✗ display-manager 别名缺失"
+          unsquashfs -ll /tmp/fs.squashfs "/etc/systemd/system/multi-user.target.wants/NetworkManager.service" 2>/dev/null | grep NetworkManager && echo "  ✓ NetworkManager enabled" || echo "  ✗ NM 未启用"
+          unsquashfs -ll /tmp/fs.squashfs "/etc/systemd/system/multi-user.target.wants/bluetooth.service" 2>/dev/null | grep bluetooth && echo "  ✓ bluetooth enabled" || echo "  ✗ bluetooth 未启用"
+          echo "===== 用户 ====="
+          unsquashfs -cat /tmp/fs.squashfs /etc/passwd 2>/dev/null | grep -E "capyloon|root" | head -4
+          echo "===== 会话启动脚本(补丁验证) ====="
+          unsquashfs -cat /tmp/fs.squashfs /opt/capyloon/start.sh 2>/dev/null | grep -E "fullscreen|MOZ_ENABLE_WAYLAND" | head -6
+          echo "===== 安装器可执行性 ====="
+          unsquashfs -ll /tmp/fs.squashfs /usr/sbin/capyloon-installer 2>/dev/null | grep capyloon-installer
