@@ -80,8 +80,33 @@ if [ ! -d plymouth-theme-capyloon ]; then
     git clone --depth 1 https://github.com/capyloon/plymouth-theme-capyloon.git
 fi
 cd plymouth-theme-capyloon
-rm -f build.sh README.md .gitignore
-rm -rf .github
-dpkg-deb -Zxz --build . "$ROOT/output/plymouth-theme-capyloon_1.3_all.deb"
+# The repo's DEBIAN/ contains debhelper build leftovers (source/, rules,
+# install, gbp.conf) that plain `dpkg-deb --build` rejects ("Is a directory").
+# Assemble a clean package tree replicating what debhelper would produce.
+PKG="$ROOT/work/plymouth-pkg"
+rm -rf "$PKG"
+mkdir -p "$PKG/DEBIAN" "$PKG/usr/share/plymouth/themes"
+cp -r capyloon "$PKG/usr/share/plymouth/themes/"
+cp DEBIAN/control "$PKG/DEBIAN/control"
+cp DEBIAN/copyright "$PKG/DEBIAN/copyright" 2>/dev/null || true
+cp DEBIAN/changelog "$PKG/DEBIAN/changelog" 2>/dev/null || true
+cp DEBIAN/triggers "$PKG/DEBIAN/triggers"
+cat > "$PKG/DEBIAN/postinst" <<'EOS'
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+        default.plymouth /usr/share/plymouth/themes/capyloon/capyloon.plymouth 90
+fi
+EOS
+cat > "$PKG/DEBIAN/postrm" <<'EOS'
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ]; then
+    update-alternatives --remove default.plymouth /usr/share/plymouth/themes/capyloon/capyloon.plymouth || true
+fi
+EOS
+chmod 755 "$PKG/DEBIAN/postinst" "$PKG/DEBIAN/postrm"
+dpkg-deb -Zxz --build "$PKG" "$ROOT/output/plymouth-theme-capyloon_1.3_all.deb"
 
 ls -la "$ROOT/output"
