@@ -16,10 +16,17 @@ ls -la "$ROOT/output/"
 echo "==== install live-build toolchain ===="
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
-    live-build squashfs-tools xorriso \
+    squashfs-tools xorriso rsync \
     grub-pc-bin grub-efi-amd64-bin grub-efi-amd64-signed shim-signed \
     mtools dosfstools debootstrap e2fsprogs parted
-dpkg -l live-build | tail -1
+# Ubuntu ships an ancient live-build (3.0~a57) that lacks the options we use.
+# Install Debian bookworm's live-build (20230502) which matches our config.
+LB_VER="20230502"
+if ! lb --version 2>/dev/null | grep -q "$LB_VER"; then
+    curl -fsSL "http://deb.debian.org/debian/pool/main/l/live-build/live-build_${LB_VER}_all.deb" -o /tmp/live-build.deb
+    sudo dpkg -i /tmp/live-build.deb || sudo apt-get install -y -f -qq
+fi
+lb --version
 
 echo "==== place local debs ===="
 mkdir -p config/packages.chroot

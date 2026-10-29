@@ -15,19 +15,21 @@ ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
 echo "Asia/Shanghai" > /etc/timezone
 
 echo "==== [hook] user setup ===="
-# The live user is created by live-build as 'capyloon' (uid 1000) which is
-# exactly the uid capyloon.service expects (User=1000).
-if id capyloon >/dev/null 2>&1; then
-    usermod -aG audio,video,input,render,netdev,bluetooth,plugdev,disk,adm,users,crontab capyloon || true
-    # password for tty logins / sudo fallback
-    echo 'capyloon:capyloon' | chpasswd
+# Create the user in the rootfs so it exists in BOTH the live session and the
+# installed system (live-boot skips creation when the user already exists;
+# the installed system never runs live-boot at all). uid 1000 matches what
+# capyloon.service expects (User=1000).
+if ! id capyloon >/dev/null 2>&1; then
+    useradd -m -u 1000 -s /bin/bash -c "Capyloon User" capyloon
 fi
+usermod -aG audio,video,input,render,netdev,bluetooth,plugdev,disk,adm,users capyloon || true
+echo 'capyloon:capyloon' | chpasswd
 echo 'root:root' | chpasswd
 
 echo "==== [hook] hostname ===="
 echo capyloon > /etc/hostname
 sed -i 's/127.0.1.1.*/127.0.1.1\tcapyloon/' /etc/hosts || true
-grep -q capyloon /etc/hosts || echo "127.0.1.1	capyloon" >> /etc/hosts
+grep -q capyloon /etc/hosts || echo "127.0.1.1  capyloon" >> /etc/hosts
 
 echo "==== [hook] plymouth theme ===="
 # The official capyloon theme deb is installed from config/packages.chroot.

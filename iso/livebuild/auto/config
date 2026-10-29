@@ -17,9 +17,7 @@ lb config noauto \
     --iso-volume "CAPYLOON_X86_64" \
     --iso-application "Capyloon OS x86_64" \
     --iso-publisher "Capyloon x86_64 Project;https://github.com/luogen-vip/capyloon-x86_64" \
-    --bootappend-live "boot=live components quiet splash" \
-    --username capyloon \
-    --hostname capyloon \
+    --bootappend-live "boot=live components quiet splash username=capyloon" \
     --debian-installer none \
     --firmware-binary true \
     --firmware-chroot true \
