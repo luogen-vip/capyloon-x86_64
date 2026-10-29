@@ -36,10 +36,15 @@ echo "==== toolchains (manual, bypasses broken b2g bootstrap) ===="
 rustup toolchain install 1.76.0 --profile minimal 2>&1 | tail -1
 export RUSTUP_TOOLCHAIN=1.76.0
 rustc --version
-if ! command -v cbindgen >/dev/null 2>&1; then
-    cargo +1.76.0 install cbindgen --version 0.26.0 2>&1 | tail -2
-fi
-cbindgen --version || true
+
+# cbindgen MUST be 0.26.x: gecko 123's cbindgen.toml contains duplicate keys
+# which cbindgen >= 0.28 (newer toml parser) rejects. Install into a private
+# root and prepend to PATH so the preinstalled 0.29 never wins.
+CBINDGEN_ROOT="$HOME/.cbindgen-026"
+cargo +1.76.0 install cbindgen --version 0.26.0 --root "$CBINDGEN_ROOT" --force 2>&1 | tail -2
+export PATH="$CBINDGEN_ROOT/bin:$PATH"
+hash -r
+echo "using cbindgen: $(command -v cbindgen) -> $(cbindgen --version)"
 
 echo "==== write CI mozconfig (based on upstream mozconfig-b2g-optdesktop) ===="
 cat > mozconfig-ci <<'EOF'
