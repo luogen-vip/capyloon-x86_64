@@ -47,8 +47,9 @@ if [ ! -d b2ghald ]; then
 fi
 cd b2ghald
 mkdir -p "prebuilts/$TARGET"
-# Try stable first; fall back to 1.70 if the tree is era-old.
-cargo build --release || cargo +1.70.0 build --release
+# The daemon uses nix::sys::stat + clap which are feature-gated: upstream
+# builds with the 'cmdline' feature (clap + nix/fs).
+cargo build --release --features cmdline
 cp target/release/b2ghald target/release/b2ghalctl "prebuilts/$TARGET/"
 tar cJf "$ROOT/output/b2ghald-$TARGET.tar.xz" prebuilts
 cd ..
