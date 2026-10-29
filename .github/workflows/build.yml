@@ -35,7 +35,9 @@ jobs:
 
   build-daemons:
     name: "2/5 api-daemon / b2ghald / ipfsd 编译"
-    runs-on: ubuntu-latest
+    # 22.04 on purpose: binaries must link against glibc <= 2.35 so they run
+    # on the Debian 12 (glibc 2.36) live system. ubuntu-latest links 2.39.
+    runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4

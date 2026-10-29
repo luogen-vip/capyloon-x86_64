@@ -70,3 +70,11 @@ usbutils
 lshw
 gnupg
 openssh-client
+grub-pc
+grub-efi-amd64
+grub-efi-amd64-bin
+grub-common
+efibootmgr
+libpci3
+libxt6
+eject
