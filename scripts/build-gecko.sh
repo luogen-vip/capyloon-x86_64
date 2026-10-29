@@ -21,12 +21,21 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq \
     build-essential curl git python3 python3-pip python3-dev \
     libgtk-3-dev libdbus-glib-1-dev libxt-dev libasound2-dev libpulse-dev \
-    unzip xz-utils bzip2 uuid-dev m4 file wget
+    unzip xz-utils bzip2 uuid-dev m4 file wget clang lld llvm
 
-echo "==== run mach bootstrap (toolchains: clang/rust/node/cbindgen) ===="
-./mach --no-interactive bootstrap || {
-    echo "bootstrap returned non-zero; continuing (toolchains may still be usable)"
-}
+echo "==== toolchains (manual, bypasses broken b2g bootstrap) ===="
+# gecko-b2g's 'mach bootstrap' has a bug in its b2g application branch
+# (ensure_android() missing os_arch), so we set up toolchains manually.
+# Gecko 123 era requires: rust ~1.76, cbindgen >= 0.26, clang >= 10, node >= 12.
+# NOTE: rust 1.99 (2026) breaks gecko 123 configure ("Don't know how to
+# translate x86_64-pc-linux-gnu for rustc"), hence the pinned version.
+rustup toolchain install 1.76.0 --profile minimal 2>&1 | tail -1
+export RUSTUP_TOOLCHAIN=1.76.0
+rustc --version
+if ! command -v cbindgen >/dev/null 2>&1; then
+    cargo +1.76.0 install cbindgen --version 0.26.0 2>&1 | tail -2
+fi
+cbindgen --version || true
 
 echo "==== write CI mozconfig (based on upstream mozconfig-b2g-optdesktop) ===="
 cat > mozconfig-ci <<'EOF'
