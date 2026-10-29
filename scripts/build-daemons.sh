@@ -14,6 +14,10 @@ cd "$ROOT"
 rustc --version
 cargo --version
 
+# Old dependency trees (e.g. time 0.3.x in api-daemon/iroh Cargo.lock) fail to
+# compile with the latest rustc. Pin era-appropriate toolchains per repo.
+rustup toolchain install 1.70.0 --profile minimal 2>&1 | tail -1 || true
+
 ############################
 # api-daemon
 ############################
@@ -25,10 +29,10 @@ cd api-daemon
 mkdir -p "prebuilts/$TARGET"
 
 # Replicates upstream daily.sh build steps.
-cargo build --release --target="$TARGET" -p sqlx-macros || echo "sqlx-macros build skipped/failed (non-fatal)"
-(cd daemon && cargo build --release --target="$TARGET")
+cargo +1.70.0 build --release --target="$TARGET" -p sqlx-macros || echo "sqlx-macros build skipped/failed (non-fatal)"
+(cd daemon && cargo +1.70.0 build --release --target="$TARGET")
 cp "target/$TARGET/release/api-daemon" "prebuilts/$TARGET/"
-(cd services/apps/appscmd && cargo build --release --target="$TARGET")
+(cd services/apps/appscmd && cargo +1.70.0 build --release --target="$TARGET")
 cp "target/$TARGET/release/appscmd" "prebuilts/$TARGET/"
 
 tar cJf "$ROOT/output/api-daemon-$TARGET.tar.xz" prebuilts
@@ -43,7 +47,8 @@ if [ ! -d b2ghald ]; then
 fi
 cd b2ghald
 mkdir -p "prebuilts/$TARGET"
-cargo build --release
+# Try stable first; fall back to 1.70 if the tree is era-old.
+cargo build --release || cargo +1.70.0 build --release
 cp target/release/b2ghald target/release/b2ghalctl "prebuilts/$TARGET/"
 tar cJf "$ROOT/output/b2ghald-$TARGET.tar.xz" prebuilts
 cd ..
@@ -57,7 +62,7 @@ if [ ! -d iroh ]; then
 fi
 cd iroh
 mkdir -p "prebuilts/$TARGET"
-cargo build --release --features cli
+cargo +1.70.0 build --release --features cli
 cp target/release/iroh "prebuilts/$TARGET/ipfsd"
 tar cJf "$ROOT/output/ipfsd-$TARGET.tar.xz" prebuilts
 cd ..

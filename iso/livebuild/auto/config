@@ -14,7 +14,6 @@ lb config noauto \
     --mirror-binary-security http://deb.debian.org/debian-security \
     --mirror-debian-installer http://deb.debian.org/debian \
     --binary-images iso-hybrid \
-    --bootloaders "grub-pc grub-efi" \
     --iso-volume "CAPYLOON_X86_64" \
     --iso-application "Capyloon OS x86_64" \
     --iso-publisher "Capyloon x86_64 Project;https://github.com/luogen-vip/capyloon-x86_64" \
@@ -28,5 +27,4 @@ lb config noauto \
     --security true \
     --updates false \
     --cache-packages true \
-    --debian-installer-distribution none \
     "${@}"

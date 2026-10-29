@@ -34,10 +34,11 @@ rm -rf cache || true
 rm -f binary*.iso || true
 
 echo "==== lb config ===="
-sh auto/config || {
-    echo "lb config with explicit bootloaders failed; retrying with defaults"
+# Try GRUB on both BIOS and UEFI first; fall back to lb defaults.
+sh auto/config --bootloaders "grub-pc grub-efi" || {
+    echo "explicit bootloaders failed; retrying with lb defaults"
     sudo rm -rf chroot cache binary .build .stage*
-    sh auto/config --bootloaders ""
+    sh auto/config
 }
 
 echo "==== lb build (this takes ~20-40 min) ===="
