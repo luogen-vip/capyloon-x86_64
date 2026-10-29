@@ -4,10 +4,19 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "复用历史 run 的编译产物（填 run id，如 40810472473）。留空=全部从源码构建"
+        required: false
+        default: ""
+
+env:
+  SOURCE_RUN_ID: ${{ inputs.source_run_id }}
 
 jobs:
   build-gecko:
     name: "1/5 Gecko(b2g) x86_64 源码编译"
+    if: ${{ inputs.source_run_id == '' || inputs.source_run_id == null }}
     runs-on: ubuntu-22.04
     timeout-minutes: 350
     steps:
@@ -35,6 +44,7 @@ jobs:
 
   build-daemons:
     name: "2/5 api-daemon / b2ghald / ipfsd 编译"
+    if: ${{ inputs.source_run_id == '' || inputs.source_run_id == null }}
     # 22.04 on purpose: binaries must link against glibc <= 2.35 so they run
     # on the Debian 12 (glibc 2.36) live system. ubuntu-latest links 2.39.
     runs-on: ubuntu-22.04
@@ -56,19 +66,43 @@ jobs:
   build-deb:
     name: "3/5 打包 Capyloon deb"
     needs: [build-gecko, build-daemons]
-    runs-on: ubuntu-latest
+    if: ${{ !cancelled() &&
+            (needs.build-gecko.result == 'success' || needs.build-gecko.result == 'skipped') &&
+            (needs.build-daemons.result == 'success' || needs.build-daemons.result == 'skipped') }}
+    runs-on: ubuntu-22.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: 下载本 run 的 b2g 产物
+        if: ${{ inputs.source_run_id == '' || inputs.source_run_id == null }}
+        uses: actions/download-artifact@v4
         with:
           name: b2g-tarball
           path: work/artifacts
-      - uses: actions/download-artifact@v4
+      - name: 下载本 run 的守护进程产物
+        if: ${{ inputs.source_run_id == '' || inputs.source_run_id == null }}
+        uses: actions/download-artifact@v4
         with:
           name: daemons
           path: work/artifacts
+
+      - name: 下载历史 run 的 b2g 产物
+        if: ${{ inputs.source_run_id != '' && inputs.source_run_id != null }}
+        uses: actions/download-artifact@v4
+        with:
+          name: b2g-tarball
+          path: work/artifacts
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ secrets.CLOUD_TOKEN }}
+      - name: 下载历史 run 的守护进程产物
+        if: ${{ inputs.source_run_id != '' && inputs.source_run_id != null }}
+        uses: actions/download-artifact@v4
+        with:
+          name: daemons
+          path: work/artifacts
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ secrets.CLOUD_TOKEN }}
 
       - name: 打包 deb
         run: bash scripts/build-deb.sh
@@ -84,15 +118,26 @@ jobs:
   build-iso:
     name: "4/5 构建 Live ISO"
     needs: [build-deb]
+    if: ${{ !cancelled() && needs.build-deb.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: 下载本 run 的 deb 产物
+        if: ${{ inputs.source_run_id == '' || inputs.source_run_id == null }}
+        uses: actions/download-artifact@v4
         with:
           name: debs
           path: output
+      - name: 下载历史 run 的 deb 产物
+        if: ${{ inputs.source_run_id != '' && inputs.source_run_id != null }}
+        uses: actions/download-artifact@v4
+        with:
+          name: debs
+          path: output
+          run-id: ${{ inputs.source_run_id }}
+          github-token: ${{ secrets.CLOUD_TOKEN }}
 
       - name: 构建 ISO
         run: bash scripts/build-iso.sh
@@ -110,6 +155,7 @@ jobs:
   release:
     name: "5/5 发布 Release"
     needs: [build-iso]
+    if: ${{ !cancelled() && needs.build-iso.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

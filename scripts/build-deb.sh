@@ -33,9 +33,11 @@ if [ ! -d nutria ]; then
 fi
 cd nutria
 
-# nutria builder's Cargo.lock is from the same era as api-daemon: needs Rust 1.70.
-rustup toolchain install 1.70.0 --profile minimal 2>&1 | tail -1 || true
-export RUSTUP_TOOLCHAIN=1.70.0
+# nutria builder (jackady) Cargo.lock needs clap 4.5.4 => rustc >= 1.74.
+# Use 1.79: new enough for clap 4.5.x, still < 1.80 so era-old `time` crates
+# in the dependency tree keep compiling.
+rustup toolchain install 1.79.0 --profile minimal 2>&1 | tail -1 || true
+export RUSTUP_TOOLCHAIN=1.79.0
 
 echo "==== apply desktop (x86_64) integration patch ===="
 if [ -f "$ROOT/patches/nutria-start-sh-desktop.patch" ]; then
