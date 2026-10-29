@@ -38,12 +38,26 @@ if command -v plymouth-set-default-theme >/dev/null 2>&1; then
 fi
 
 echo "==== [hook] enable services ===="
-systemctl enable NetworkManager 2>/dev/null || true
-systemctl enable bluetooth 2>/dev/null || true
-systemctl enable capyloon 2>/dev/null || true
-systemctl enable b2ghald 2>/dev/null || true
-systemctl enable haveged 2>/dev/null || true
-systemctl enable systemd-resolved 2>/dev/null || true
+# systemctl enable may silently fail inside the lb chroot; fall back to
+# creating the symlinks directly so both live and installed systems boot
+# with these services active.
+enable_unit() {
+    local unit="$1"
+    systemctl enable "$unit" 2>/dev/null || true
+    local src="/lib/systemd/system/$unit"
+    local dst="/etc/systemd/system/multi-user.target.wants/$unit"
+    if [ -f "$src" ] && [ ! -e "$dst" ]; then
+        mkdir -p "$(dirname "$dst")"
+        ln -sf "$src" "$dst"
+        echo "  linked $unit"
+    fi
+}
+enable_unit NetworkManager.service
+enable_unit bluetooth.service
+enable_unit capyloon.service
+enable_unit b2ghald.service
+enable_unit haveged.service
+enable_unit systemd-resolved.service
 
 echo "==== [hook] gecko desktop prefs (extra safety) ===="
 # Appended on first boot by /opt/capyloon/start.sh via user.js; here we make
