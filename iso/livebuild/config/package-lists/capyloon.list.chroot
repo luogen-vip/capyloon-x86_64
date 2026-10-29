@@ -70,10 +70,10 @@ usbutils
 lshw
 gnupg
 openssh-client
-grub-pc
-grub-efi-amd64
-grub-efi-amd64-bin
+grub2-common
 grub-common
+grub-pc-bin
+grub-efi-amd64-bin
 efibootmgr
 libpci3
 libxt6
